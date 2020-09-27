@@ -1,0 +1,36 @@
+node {
+   def mvnHome
+   def dockerHome = tool name: 'docker', type: 'dockerTool'
+   stage('Git checkout') { 
+      git credentialsId: 'd2cb6d02-315f-4501-9000-e120c13f8d3b', url: 'https://github.com/vijinells/junit-handson.git' 
+                
+      mvnHome = tool 'maven-3'
+   }
+   stage('Maven Build Package') {
+      // Run the maven build
+      withEnv(["MVN_HOME=$mvnHome"]) {
+         if (isUnix()) {
+            sh '"$MVN_HOME/bin/mvn" -Dmaven.test.failure.ignore package spring-boot:repackage'
+         } else {
+            bat(/"%MVN_HOME%\bin\mvn" -Dmaven.test.failure.ignore clean package/)
+         }
+      }
+   }
+   stage('Docker Build') {
+      sh  "${dockerHome}/bin/docker build -t vijinells/junit-handson:0.0.18 ."
+   }
+   stage('Docker Push') {
+       withCredentials([string(credentialsId: 'bootcamp', variable: 'dockerHub')]) {
+      sh  "${dockerHome}/bin/docker login -u vijinells -p ${dockerHub}"
+    }
+      sh  "${dockerHome}/bin/docker push vijinells/junit-handson:0.0.18"
+   }
+
+   
+stage('SSH remote server') {
+    def dockerCmd = "docker run -p 8081:8081 -d vijinells/junit-handson:0.0.18"
+       sshagent(['dockerServerSSHPwd']) {
+    sh "ssh -o StrictHostKeyChecking=no jenkins@34.66.171.176 ${dockerCmd}"
+}
+}
+}
